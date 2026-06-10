@@ -21,7 +21,9 @@
 !.pas/docs/*
 !.pas/hooks/
 !.pas/hooks/*
-!.pas/CLAUDE.example.md
+!.pas/CLAUDE.md
+!.pas/ROOT.md
+!.pas/pas 安装引导.md
 
 # ---- .claude 配置（仅放行 settings.json） ----
 !.claude/
