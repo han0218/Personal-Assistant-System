@@ -1,0 +1,28 @@
+# === PAS 系统开源白名单 gitignore ===
+# 默认排除一切，仅放行系统设计相关文件
+# 设计理念：公开的是协议和工具，不是个人内容
+
+# 排除一切文件（所有层级）
+*
+
+# 保留 gitignore 自身
+!.gitignore
+
+# ---- 根目录系统文件 ----
+!README.md
+!CLAUDE.md
+!setup.bat
+!test_mem0.py
+
+# ---- .pas 系统协议目录 ----
+!.pas/
+!.pas/mem0_config.py
+!.pas/docs/
+!.pas/docs/*
+!.pas/hooks/
+!.pas/hooks/*
+!.pas/CLAUDE.example.md
+
+# ---- .claude 配置（仅放行 settings.json） ----
+!.claude/
+!.claude/settings.json

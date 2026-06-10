@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<PYTHON_PATH> \"<VAULT_ROOT>/.pas/hooks/style_hook.py\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<PYTHON_PATH> \"<VAULT_ROOT>/.pas/hooks/对话日志.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
