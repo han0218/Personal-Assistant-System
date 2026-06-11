@@ -25,6 +25,9 @@
 !.pas/ROOT.md
 !.pas/pas 安装引导.md
 
+# 同步脱敏清单绝不公开（含敏感串，即使将来放宽 .pas/ 规则也须保留本条）
+.pas/同步脱敏清单.md
+
 # ---- .claude 配置（仅放行 settings.json） ----
 !.claude/
 !.claude/settings.json
