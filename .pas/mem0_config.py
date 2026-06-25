@@ -16,10 +16,11 @@ Vector Store: Qdrant (本地文件存储)
     MEM0_DATA_DIR     — Mem0 数据目录（可选，默认库根 .mem0_data/）
 """
 
+import atexit
 import os
-import sys
 
 from mem0 import Memory
+from qdrant_client import QdrantClient
 from mem0.configs.base import (
     MemoryConfig,
     VectorStoreConfig,
@@ -40,9 +41,28 @@ DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 if not DEEPSEEK_API_KEY:
     raise RuntimeError("请设置环境变量 DEEPSEEK_API_KEY")
 
+_qdrant_client: QdrantClient | None = None
+_memory_instance: Memory | None = None
+_knowledge_instance: Memory | None = None
 
-def get_config() -> MemoryConfig:
-    """返回 PAS 的 Mem0 配置"""
+
+def _get_qdrant_client() -> QdrantClient:
+    """返回共享的本地 Qdrant 客户端，避免同目录多实例独占锁冲突。"""
+    global _qdrant_client
+    if _qdrant_client is None:
+        _qdrant_client = QdrantClient(path=QDRANT_PATH)
+    return _qdrant_client
+
+
+def _close_qdrant_client() -> None:
+    if _qdrant_client is not None:
+        _qdrant_client.close()
+
+
+atexit.register(_close_qdrant_client)
+
+
+def _build_config(collection_name: str) -> MemoryConfig:
     return MemoryConfig(
         llm=LlmConfig(
             provider="openai",
@@ -63,7 +83,8 @@ def get_config() -> MemoryConfig:
             provider="qdrant",
             config={
                 "path": QDRANT_PATH,
-                "collection_name": "pas_pool",
+                "client": _get_qdrant_client(),
+                "collection_name": collection_name,
                 "embedding_model_dims": 512,
                 "on_disk": True,
             },
@@ -71,13 +92,27 @@ def get_config() -> MemoryConfig:
     )
 
 
-# 全局单例，避免重复加载模型
-_memory_instance: Memory | None = None
+def get_config() -> MemoryConfig:
+    """返回 pool 层的 Mem0 配置。"""
+    return _build_config("pas_pool")
 
 
 def get_memory() -> Memory:
-    """返回 Mem0 Memory 单例"""
+    """返回 pool 层 Mem0 Memory 单例。"""
     global _memory_instance
     if _memory_instance is None:
         _memory_instance = Memory(get_config())
     return _memory_instance
+
+
+def get_knowledge_config() -> MemoryConfig:
+    """返回知识层的 Mem0 配置（独立 collection: pas_knowledge）。"""
+    return _build_config("pas_knowledge")
+
+
+def get_knowledge_memory() -> Memory:
+    """返回知识层 Mem0 Memory 单例。"""
+    global _knowledge_instance
+    if _knowledge_instance is None:
+        _knowledge_instance = Memory(get_knowledge_config())
+    return _knowledge_instance

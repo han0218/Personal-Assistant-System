@@ -55,10 +55,10 @@
 
 协议和脚本里有两处硬编码路径来自原始安装机器，必须全部替换成本机实际路径：
 
-- `D:\Python311\python.exe` → 替换为本机 Python x64 实际路径
-- `D:\Agent\CC文件\pas-system\` → 替换为本机库根绝对路径
+- `<PYTHON_EXE>` → 替换为本机 Python 3.11 x64 实际路径，或使用 `py -3.11`
+- `<PAS_ROOT>` → 替换为本机库根绝对路径
 
-- han_xueming → 替换为新用户自选的 user_id（建议姓名拼音，全小写下划线连接，如 zhang_san。先问用户要这个 id，再执行替换）
+- <YOUR_USER_ID> → 替换为新用户自选的 user_id（建议使用稳定、简短、无空格的标识。先问用户要这个 id，再执行替换）
 
 **需要检查并替换的文件范围：**
 - `.pas/CLAUDE.md`

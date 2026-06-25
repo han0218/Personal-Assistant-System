@@ -1,75 +1,90 @@
-"""Mem0 验证：DeepSeek LLM + fastembed 本地嵌入 + 本地 Qdrant"""
-import os, sys
+"""Mem0 验证：DeepSeek LLM + fastembed 本地嵌入 + 本地 Qdrant。
 
-os.environ["MEM0_DIR"] = os.path.join(os.path.dirname(__file__), ".mem0_data")
-# HuggingFace 镜像，加速模型下载
-os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+公开版测试脚本只验证安装后的基础闭环：写入一条临时记录、检索它、再按 ID 删除。
+API Key 从环境变量 DEEPSEEK_API_KEY 读取，不写入仓库文件。
+"""
 
-from mem0 import Memory
-from mem0.configs.base import MemoryConfig, VectorStoreConfig, EmbedderConfig, LlmConfig
+import os
+import sys
+import uuid
+from pathlib import Path
+
+sys.stdout.reconfigure(encoding="utf-8")
+
+PAS_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PAS_ROOT / ".pas"))
+
+from mem0 import Memory  # noqa: E402
+from mem0_config import get_config  # noqa: E402
+
+
+TEST_COLLECTION = "pas_test"
+TEST_USER_ID = "pas_test_runner"
+
+
+def _extract_added_ids(result):
+    if isinstance(result, dict):
+        if result.get("id"):
+            return [result["id"]]
+        results = result.get("results") or []
+        return [item.get("id") for item in results if isinstance(item, dict) and item.get("id")]
+    if isinstance(result, list):
+        return [item.get("id") for item in result if isinstance(item, dict) and item.get("id")]
+    return []
+
 
 def main():
+    if not os.environ.get("DEEPSEEK_API_KEY"):
+        raise RuntimeError("请先设置环境变量 DEEPSEEK_API_KEY")
+
     print("1. 初始化 Memory...")
-    print("   LLM: DeepSeek deepseek-chat")
-    print("   Embedding: fastembed BAAI/bge-small-zh-v1.5 (本地)")
-    print("   Vector Store: Qdrant (本地文件)")
-
-    config = MemoryConfig(
-        llm=LlmConfig(
-            provider="openai",  # DeepSeek 兼容 OpenAI SDK
-            config={
-                "model": "deepseek-chat",
-                "api_key": "<YOUR_DEEPSEEK_API_KEY>",
-                "openai_base_url": "https://api.deepseek.com/v1",
-            },
-        ),
-        embedder=EmbedderConfig(
-            provider="fastembed",
-            config={
-                "model": "BAAI/bge-small-zh-v1.5",
-                "embedding_dims": 512,
-            },
-        ),
-        vector_store=VectorStoreConfig(
-            provider="qdrant",
-            config={
-                "path": os.path.join(os.environ["MEM0_DIR"], "qdrant"),
-                "collection_name": "pas_test",
-                "embedding_model_dims": 512,
-                "on_disk": True,
-            },
-        ),
-    )
-
+    config = get_config()
+    vector_config = config.vector_store.config
+    if isinstance(vector_config, dict):
+        vector_config["collection_name"] = TEST_COLLECTION
+    else:
+        vector_config.collection_name = TEST_COLLECTION
     m = Memory(config)
-    print("   初始化成功\n")
+    print(f"   collection: {TEST_COLLECTION}")
 
-    print("2. 写入测试记录...")
-    result = m.add(
-        "我在想知行合一的问题，卡在王阳明的论证链条上：从心即理到知行合一，中间的跳跃是怎么完成的？",
-        user_id="<YOUR_USER_ID>",
-        metadata={"source_type": "note", "tags": ["中国哲学", "王阳明", "知行合一"]},
-    )
-    print(f"   写入成功: {result}\n")
+    token = f"pas-public-test-{uuid.uuid4()}"
+    added_ids = []
 
-    print("3. 语义检索...")
-    results = m.search(
-        "王阳明知行合一的论证结构",
-        filters={"user_id": "<YOUR_USER_ID>"},
-        limit=3,
-    )
-    print(f"   raw type: {type(results)}")
-    print(f"   raw keys: {results.keys() if isinstance(results, dict) else 'N/A'}")
-    if isinstance(results, dict) and "results" in results:
-        items = results["results"]
-        for i, r in enumerate(items):
-            mem = r.get("memory", "") if isinstance(r, dict) else str(r)
-            score = r.get("score", "N/A") if isinstance(r, dict) else "N/A"
-            print(f"   [{i+1}] score={score} -> {str(mem)[:120]}")
-    elif isinstance(results, list):
-        for i, r in enumerate(results):
-            print(f"   [{i+1}] {str(r)[:120]}")
-    print("\nMem0 写入/检索闭环验证通过")
+    try:
+        print("2. 写入临时测试记录...")
+        result = m.add(
+            f"这是一条 PAS 公开版安装验证记录，唯一标识：{token}",
+            user_id=TEST_USER_ID,
+            metadata={"source_type": "test", "token": token},
+            infer=False,
+        )
+        added_ids = _extract_added_ids(result)
+        if not added_ids:
+            raise RuntimeError(f"写入成功但未拿到记录 ID: {result}")
+        print(f"   写入 ID: {added_ids}")
+
+        print("3. 语义检索...")
+        response = m.search(
+            token,
+            filters={"user_id": TEST_USER_ID},
+            top_k=3,
+        )
+        items = response.get("results", []) if isinstance(response, dict) else response
+        memories = [item.get("memory", "") for item in items if isinstance(item, dict)]
+        if not any(token in memory for memory in memories):
+            raise RuntimeError(f"未检索到刚写入的测试记录: {response}")
+        print("   检索成功")
+
+    finally:
+        for memory_id in added_ids:
+            try:
+                m.delete(memory_id=memory_id)
+                print(f"   已清理测试记录: {memory_id}")
+            except Exception as exc:  # pragma: no cover - 清理失败时显式告警
+                print(f"   清理失败，请手动检查 {memory_id}: {exc}")
+
+    print("\nMem0 写入/检索/清理闭环验证通过")
+
 
 if __name__ == "__main__":
     main()

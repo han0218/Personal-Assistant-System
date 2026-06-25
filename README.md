@@ -86,25 +86,18 @@ Open a terminal in the `pas-system/` folder and run:
 setup.bat
 ```
 
-This installs the Python dependencies (`mem0ai`, `fastembed`) and walks you through setting your DeepSeek API key as a persistent Windows environment variable. The key is stored in your system environment, never in any file.
-
-> **Note:** Edit `setup.bat` first and replace `<YOUR_PYTHON_PATH>` with the actual path to your Python 3.11 executable (e.g. `C:\Python311`).
+This installs the Python dependencies from `requirements.txt` and checks whether `DEEPSEEK_API_KEY` is available in your environment. The key is stored in your system environment, never in any file. If Python is not on `PATH`, set `PAS_PYTHON` to your local `python.exe` path before running the script. In the examples below, replace `<python>` with `python`, `py -3.11`, or your own Python executable path.
 
 ### 3. Set up your ROOT.md
 
-Copy `.pas/ROOT.md` and fill in your own profile:
-
-- Who you are and what you're currently thinking about
-- Your tag vocabulary (the controlled list CC picks from when tagging notes)
-
-This file is the only thing CC reads at startup. Everything else is loaded on demand. It should stay short — a few hundred words at most.
+This repository includes a template `.pas/ROOT.md`. During setup and calibration, fill it with your own profile and tag vocabulary. Keep your completed `ROOT.md` local; it is personal context, not something to publish back to a public repo.
 
 ### 4. Verify Mem0
 
 Run the test script to confirm the embedding pipeline and DeepSeek connection are working:
 
 ```
-<YOUR_PYTHON_PATH>\python.exe test_mem0.py
+<python> test_mem0.py
 ```
 
 If it completes without errors, Mem0 is ready.
@@ -123,7 +116,7 @@ To ingest a file: drop it in the vault, tell CC to process it. CC will convert i
 pas-system/
 ├── .pas/                   # System files (hidden in Obsidian)
 │   ├── CLAUDE.md           # The full protocol — how CC behaves
-│   ├── ROOT.md             # Your profile + tag vocabulary (not in this repo — you write your own)
+│   ├── ROOT.md             # Template profile + tag vocabulary; fill locally
 │   ├── mem0_config.py      # Mem0 singleton config
 │   ├── hooks/              # Claude Code hooks (e.g. session transcript extraction)
 │   ├── projects/           # Per-project context files, loaded on demand

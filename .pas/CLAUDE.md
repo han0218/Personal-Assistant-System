@@ -23,6 +23,9 @@
 
 两层物理隔离、检索不隔离。你每轮要判断：当前在处理的是用户的状态（走 pool 规则），还是别人的知识（走知识层规则，见第 9 节）。**原版保全只约束 pool 层，不约束知识层**——这不是破例，是两类对象本就该有两套规则。
 
+关于风格设置。 用户对你说话的形式不满时——嫌啰嗦、语气不对、回复太长、想换个说话方式——且明确要的是「以后都这样」的持久改变，去改 .pas/hooks/style_hook.py。在对话里临时调整语气不算解决，用户下次开新对话风格就还原了。
+区分：用户对某条回答的内容不满 → 重新回答，不改 hook；用户要改画像 → §10.5，不改 hook。
+
 ---
 
 ## 1. 架构分工
@@ -269,7 +272,7 @@ infer=False 表示原样存入，跳过 LLM 抽取。这同时保证三件事：
    不读 YAML 属性区的精简 summary（①）。取错会用精简版覆盖检索数据，导致召回质量静默下降。
 
 **3. 文件更新时的同步流程（先删后写，不可只写）：**
-   - 用 m.search("<文件路径>", filters={"user_id":"<YOUR_USER_ID>"}, limit=20)
+   - 用 m.search("<文件路径>", filters={"user_id":"<YOUR_USER_ID>"}, top_k=20)
      找出所有 metadata.file_path == 本文件路径 的记录。
      注意：用文件路径字符串做 query，search 走语义检索，不受条数硬限制。
    - 核对返回结果里每条的 metadata.file_path，确认是本文件的才删。
@@ -280,7 +283,7 @@ infer=False 表示原样存入，跳过 LLM 抽取。这同时保证三件事：
    【废弃】不再使用 get_all 定位旧记录——get_all 有 20 条硬限制，
    池子增大后无法覆盖全部记录，会导致旧记录删不干净。
 
-   注：search 的 limit 参数为建议值，实际返回条数由 Mem0 内部控制（实测最多20条），
+   注：search 的 top_k 参数为建议值，实际返回条数由 Mem0 内部控制（实测最多20条），
    不影响检索质量，无需额外处理。
 
 **API 参数位置差异（易错，必记）：**
@@ -683,7 +686,7 @@ updated: <YYYY-MM-DD>
 
 ## 附：环境配置说明
 
-- 系统：Windows ARM64，需使用 x64 Python（路径：`<YOUR_PYTHON_PATH>`）
+- 系统：Windows ARM64，需使用 x64 Python（路径：`<PYTHON_EXE>`）
 - Mem0 依赖：fastembed bge-small-zh-v1.5（本地）+ DeepSeek LLM + Qdrant 本地存储
 - API Key 从环境变量 `DEEPSEEK_API_KEY` 读取
 - 配置入口：`mem0_config.py`，使用 `get_memory()` 获取单例
@@ -693,12 +696,10 @@ updated: <YYYY-MM-DD>
 
 本规范适用于所有 Mem0 操作，包括 m.add()、m.search()、m.delete()、m.get_all()——不限于同步场景。凡构造 Mem0 调用参数前，必须按以下顺序检查，不得跳过：
 
-1. **确认 Python 路径**：所有 Python 操作必须使用 `<YOUR_PYTHON_PATH>\python.exe`，
-   不得使用系统默认 python/pip。
-   第一步永远是：`"<YOUR_PYTHON_PATH>\python.exe" --version` 确认路径正确。
+1. **确认 Python 路径**：所有 Python 操作必须先确认解释器路径。可使用安装脚本自动探测到的 Python，或设置 `PAS_PYTHON` 指向本机 Python 3.11 x64。第一步永远是：`<PYTHON_EXE> --version` 确认路径正确。
 
 2. **确认环境变量**：不依赖 shell 的 `echo %VAR%`，
-   用 Python 读取：`"<YOUR_PYTHON_PATH>\python.exe" -c "import os; print(os.environ.get('DEEPSEEK_API_KEY','NOT FOUND'))"`
+   用 Python 读取：`<PYTHON_EXE> -c "import os; print(os.environ.get('DEEPSEEK_API_KEY','NOT FOUND'))"`
 
 3. **确认调用格式**：同步前先读 `mem0_config.py` 确认配置
    （LLM/Embedding/Qdrant 后端），再读库根目录的 `test_mem0.py`
@@ -712,7 +713,7 @@ updated: <YYYY-MM-DD>
    `m.search(...)` 返回的结构是 `{"results": [...]}`，
    真正的记录列表躲在 `results["results"]` 里。必须先取出来再遍历：
    ```python
-   resp = m.search(query, filters={"user_id": "<YOUR_USER_ID>"}, limit=20)
+   resp = m.search(query, filters={"user_id": "<YOUR_USER_ID>"}, top_k=20)
    items = resp.get("results", [])
    for r in items:
        meta = r.get("metadata") or {}
@@ -730,11 +731,9 @@ updated: <YYYY-MM-DD>
    照其结构改写。手写单行脚本最常见的错是漏 import（如漏 import os）、
    引号转义错，撞墙再改浪费成本。
 
-7. **Qdrant 本地锁限制：pool 和知识层不能在同一脚本里同时实例化。**
+7. **Qdrant 本地锁限制：pool 和知识层必须共享本地 client。**
    `get_memory()`（pas_pool）和 `get_knowledge_memory()`（pas_knowledge）
-   不能在同一个 Python 进程里同时调用——Qdrant 本地文件模式同一时刻只允许一个实例持有锁，
-   同时实例化会报锁冲突错误。
-   需要同时操作两层时，用两次独立的脚本/命令顺序执行，不要在一个脚本里同时 import 两个实例。
+   可以在同一个 Python 进程里同时调用，但必须由配置层共享同一个本地 Qdrant client；不要绕过 `.pas/mem0_config.py` 自己各建一个本地 Qdrant 实例，否则仍可能触发文件锁冲突。
 
 **Mem0 脚本编写规范（Windows GBK 环境）：**
 
